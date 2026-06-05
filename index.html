@@ -86,7 +86,7 @@ const GCOLOR = { A:"#8B93A1", B:"#E4572E", C:"#2EB872", D:"#2D7DD2", E:"#7B5BD6"
                  G:"#9AA3B0", H:"#E84A8A", I:"#4361EE", J:"#F4A82C", K:"#D7263D", L:"#9B5DE5" };
 // Cores por fase do mata-mata (igual ao pôster)
 const PHASE = {
-  R32:{ label:"16 AVOS",  color:"#ED7D3A" },
+  R32:{ label:"16-AVOS",  color:"#ED7D3A" },
   R16:{ label:"OITAVAS",  color:"#2DB9A0" },
   QF: { label:"QUARTAS",  color:"#ED7D3A" },
   SF: { label:"SEMIFINAL",color:"#2DB9A0" },
@@ -233,7 +233,7 @@ function buildFixtures(){
 
 // ---------------------------- Chaveamento (seeding) --------------------------
 // ===================== Chaveamento OFICIAL (regulamento FIFA 2026) =====================
-// 32-avos (jogos 73–88): w=vencedor do grupo, r=vice, t=3º alocado ao slot do vencedor X.
+// 16-avos (jogos 73–88): w=vencedor do grupo, r=vice, t=3º alocado ao slot do vencedor X.
 const R32_DEF = [
   {n:73,a:{r:"A"},b:{r:"B"}}, {n:74,a:{w:"E"},b:{t:"E"}}, {n:75,a:{w:"F"},b:{r:"C"}}, {n:76,a:{w:"C"},b:{r:"F"}},
   {n:77,a:{w:"I"},b:{t:"I"}}, {n:78,a:{r:"E"},b:{r:"I"}}, {n:79,a:{w:"A"},b:{t:"A"}}, {n:80,a:{w:"L"},b:{t:"L"}},
@@ -273,7 +273,7 @@ function winner(m){ if(!m||m.home==null||m.away==null||m.hg==null||m.ag==null) r
   if(m.hpen!=null&&m.apen!=null){ if(m.hpen>m.apen) return m.home; if(m.apen>m.hpen) return m.away; } return null; }
 function loser(m){ const w=winner(m); if(!w) return null; return w===m.home?m.away:m.home; }
 
-// Confrontos dos 32-avos com os times reais.
+// Confrontos dos 16-avos com os times reais.
 function buildR32(groupRows, bestThirds){
   const W={},R={},T={};
   for(const g of GROUP_CODES){ W[g]=groupRows[g][0].code; R[g]=groupRows[g][1].code; T[g]=groupRows[g][2].code; }
@@ -281,7 +281,7 @@ function buildR32(groupRows, bestThirds){
   const pick=(s)=> s.w? W[s.w] : s.r? R[s.r] : T[tA[s.t]];
   return R32_DEF.map(m=>({n:m.n, home:pick(m.a), away:pick(m.b)}));
 }
-// Mata-mata completo a partir dos 32-avos + resultados (koRes indexado pelo nº do jogo).
+// Mata-mata completo a partir dos 16-avos + resultados (koRes indexado pelo nº do jogo).
 function buildBracketOfficial(r32, res){
   if(!r32) return null;
   const M={};
@@ -371,7 +371,7 @@ function mcRunBatch(n, acc){
     const tA=assignThirds(thirds.slice(0,8).map(x=>x.group));
     const pick=(sl)=> sl.w? W[sl.w] : sl.r? R[sl.r] : T[tA[sl.t]];
     const win={};
-    for(const m of R32_DEF) win[m.n]=mcKoWin(pick(m.a),pick(m.b));     // 32-avos -> oitavas
+    for(const m of R32_DEF) win[m.n]=mcKoWin(pick(m.a),pick(m.b));     // 16-avos -> oitavas
     const w=(ref)=> win[+ref.slice(1)];
     for(const nn of [89,90,91,92,93,94,95,96]){ const [a,b]=KO_FLOW[nn]; win[nn]=mcKoWin(w(a),w(b)); acc.quarter[win[nn]]++; }
     for(const nn of [97,98,99,100]){ const [a,b]=KO_FLOW[nn]; win[nn]=mcKoWin(w(a),w(b)); acc.semi[win[nn]]++; }
@@ -770,7 +770,7 @@ function Empty({T,sub,done,onGen}){
 
 function Bracket({b,T,sub,setKo,onSim,dark}){
   const M=b.M, champ=b.champion;
-  // metades da chave (estrutura oficial): cada lado vai de 8 32-avos até 1 semifinalista
+  // metades da chave (estrutura oficial): cada lado vai de 8 16-avos até 1 semifinalista
   const L={ R32:[74,77,73,75,83,84,81,82], R16:[89,90,93,94], QF:[97,98], SF:[101] };
   const Rr={ SF:[102], QF:[99,100], R16:[91,92,95,96], R32:[76,78,79,80,86,88,85,87] };
   const cap=(n)=> n===101?SF_INFO[0] : n===102?SF_INFO[1] : (Rr.R32.includes(n)||L.R32.includes(n))?R32_LABEL[n] : null;
@@ -814,7 +814,7 @@ function Bracket({b,T,sub,setKo,onSim,dark}){
       </div>
       {/* legenda de fases + datas */}
       <div style={{display:"flex",flexWrap:"wrap",gap:"4px 14px",fontSize:10,color:sub,marginTop:4}}>
-        {[["R32","32-avos"],["R16","oitavas"],["QF","quartas"],["SF","semis"],["F","final"]].map(([k,l])=>(
+        {[["R32","16-avos"],["R16","oitavas"],["QF","quartas"],["SF","semis"],["F","final"]].map(([k,l])=>(
           <span key={k} style={{display:"inline-flex",alignItems:"center",gap:4}}>
             <i style={{width:9,height:9,borderRadius:2,background:PHASE[k].color,display:"inline-block"}}/>{l}: {PHASEDATE[k]}
           </span>
