@@ -232,63 +232,81 @@ function buildFixtures(){
 }
 
 // ---------------------------- Chaveamento (seeding) --------------------------
-function seedOrder(n){ // ordem padrão de chave para n potências de 2
-  let pls=[1,2];
-  while(pls.length<n){ const sum=pls.length*2+1, out=[]; for(const p of pls){out.push(p,sum-p);} pls=out; }
-  return pls;
-}
-function buildSeeds(groupRows, bestThirds){
-  const qual=[];
-  GROUP_CODES.forEach(g=>{ qual.push(groupRows[g][0].code, groupRows[g][1].code); });
-  bestThirds.slice(0,8).forEach(r=>qual.push(r.code));
-  // ranqueia os 32 por desempenho na fase de grupos
-  const stat={}; [...qual].forEach(()=>{});
-  qual.sort((x,y)=>{
-    const rx=findRow(groupRows,x), ry=findRow(groupRows,y);
-    return cmp(rx,ry) || (TEAM[y].s-TEAM[x].s) || x.localeCompare(y);
-  });
-  const order=seedOrder(32);            // seeds em ordem de posição
-  const pos=order.map(seed=>qual[seed-1]);
-  // evita reencontro do mesmo grupo nos 32 avos (melhor esforço)
-  for(let i=0;i<16;i++){
-    if(TEAM[pos[2*i]].g===TEAM[pos[2*i+1]].g){
-      for(let j=i+1;j<16;j++){
-        if(TEAM[pos[2*j+1]].g!==TEAM[pos[2*i]].g && TEAM[pos[2*j]].g!==TEAM[pos[2*i+1]].g){
-          [pos[2*i+1],pos[2*j+1]]=[pos[2*j+1],pos[2*i+1]]; break;
-        }
-      }
+// ===================== Chaveamento OFICIAL (regulamento FIFA 2026) =====================
+// 32-avos (jogos 73–88): w=vencedor do grupo, r=vice, t=3º alocado ao slot do vencedor X.
+const R32_DEF = [
+  {n:73,a:{r:"A"},b:{r:"B"}}, {n:74,a:{w:"E"},b:{t:"E"}}, {n:75,a:{w:"F"},b:{r:"C"}}, {n:76,a:{w:"C"},b:{r:"F"}},
+  {n:77,a:{w:"I"},b:{t:"I"}}, {n:78,a:{r:"E"},b:{r:"I"}}, {n:79,a:{w:"A"},b:{t:"A"}}, {n:80,a:{w:"L"},b:{t:"L"}},
+  {n:81,a:{w:"D"},b:{t:"D"}}, {n:82,a:{w:"G"},b:{t:"G"}}, {n:83,a:{r:"K"},b:{r:"L"}}, {n:84,a:{w:"H"},b:{r:"J"}},
+  {n:85,a:{w:"B"},b:{t:"B"}}, {n:86,a:{w:"J"},b:{r:"H"}}, {n:87,a:{w:"K"},b:{t:"K"}}, {n:88,a:{r:"D"},b:{r:"G"}},
+];
+// Grupos permitidos para o 3º colocado de cada slot de vencedor (do regulamento).
+const T3_ALLOWED = {
+  A:["C","E","F","H","I"], B:["E","F","G","I","J"], D:["B","E","F","I","J"], E:["A","B","C","D","F"],
+  G:["A","E","H","I","J"], I:["C","D","F","G","H"], K:["D","E","I","J","L"], L:["E","H","I","J","K"],
+};
+const T3_SLOTS = ["A","B","D","E","G","I","K","L"];
+// Fluxo do mata-mata: jogo -> [refA, refB]. W=vencedor, L=perdedor do jogo citado.
+const KO_FLOW = {
+  89:["W74","W77"],90:["W73","W75"],91:["W76","W78"],92:["W79","W80"],
+  93:["W83","W84"],94:["W81","W82"],95:["W86","W88"],96:["W85","W87"],
+  97:["W89","W90"],98:["W93","W94"],99:["W91","W92"],100:["W95","W96"],
+  101:["W97","W98"],102:["W99","W100"],103:["L101","L102"],104:["W101","W102"],
+};
+// Aloca os 8 terceiros classificados aos 8 slots, respeitando os grupos permitidos.
+// (Existe matching válido para qualquer combinação de 8 entre os 12 grupos — Anexo C.)
+function assignThirds(qGroups){
+  const qset=new Set(qGroups), used=new Set(), assign={};
+  const bt=(i)=>{
+    if(i===T3_SLOTS.length) return true;
+    const s=T3_SLOTS[i];
+    for(const g of T3_ALLOWED[s]){
+      if(qset.has(g) && !used.has(g)){ assign[s]=g; used.add(g); if(bt(i+1)) return true; used.delete(g); delete assign[s]; }
     }
-  }
-  return pos;
+    return false;
+  };
+  bt(0);
+  return assign; // grupo-do-vencedor -> grupo-do-3º
 }
-const findRow=(groupRows,code)=>{ const g=TEAM[code].g; return groupRows[g].find(r=>r.code===code); };
-
-// monta as rodadas do mata-mata a partir das 32 sementes + resultados
-function mk(id,home,away,res){ const r=res[id]||{}; return {id,home,away,hg:r.hg??null,ag:r.ag??null,hpen:r.hpen??null,apen:r.apen??null}; }
 function winner(m){ if(!m||m.home==null||m.away==null||m.hg==null||m.ag==null) return null;
   if(m.hg>m.ag) return m.home; if(m.ag>m.hg) return m.away;
   if(m.hpen!=null&&m.apen!=null){ if(m.hpen>m.apen) return m.home; if(m.apen>m.hpen) return m.away; } return null; }
 function loser(m){ const w=winner(m); if(!w) return null; return w===m.home?m.away:m.home; }
-function buildBracket(seeds, res){
-  if(!seeds) return null;
-  const R32=[]; for(let i=0;i<16;i++) R32.push(mk(`R32-${i}`,seeds[2*i],seeds[2*i+1],res));
-  const R16=[]; for(let i=0;i<8;i++) R16.push(mk(`R16-${i}`,winner(R32[2*i]),winner(R32[2*i+1]),res));
-  const QF =[]; for(let i=0;i<4;i++) QF.push(mk(`QF-${i}`,winner(R16[2*i]),winner(R16[2*i+1]),res));
-  const SF =[]; for(let i=0;i<2;i++) SF.push(mk(`SF-${i}`,winner(QF[2*i]),winner(QF[2*i+1]),res));
-  const TP = mk("TP-0",loser(SF[0]),loser(SF[1]),res);
-  const F  = mk("F-0",winner(SF[0]),winner(SF[1]),res);
-  return { R32,R16,QF,SF,TP,F, champion:winner(F) };
+
+// Confrontos dos 32-avos com os times reais.
+function buildR32(groupRows, bestThirds){
+  const W={},R={},T={};
+  for(const g of GROUP_CODES){ W[g]=groupRows[g][0].code; R[g]=groupRows[g][1].code; T[g]=groupRows[g][2].code; }
+  const tA=assignThirds(bestThirds.filter(x=>x.ok).map(x=>x.group));
+  const pick=(s)=> s.w? W[s.w] : s.r? R[s.r] : T[tA[s.t]];
+  return R32_DEF.map(m=>({n:m.n, home:pick(m.a), away:pick(m.b)}));
 }
-function simulateBracket(seeds){
+// Mata-mata completo a partir dos 32-avos + resultados (koRes indexado pelo nº do jogo).
+function buildBracketOfficial(r32, res){
+  if(!r32) return null;
+  const M={};
+  const mk=(n,home,away)=>{ const r=res[n]||{}; M[n]={id:n,n,home,away,hg:r.hg??null,ag:r.ag??null,hpen:r.hpen??null,apen:r.apen??null}; };
+  r32.forEach(m=>mk(m.n,m.home,m.away));
+  for(const n of [89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104]){
+    const [ra,rb]=KO_FLOW[n];
+    const team=(ref)=>{ const src=M[+ref.slice(1)]; if(!src) return null; return ref[0]==="W"?winner(src):loser(src); };
+    mk(n, team(ra), team(rb));
+  }
+  return { M, champion: winner(M[104]) };
+}
+function simulateOfficial(r32){
   const res={};
-  const apply=(arr)=>arr.forEach(m=>{ if(m.home&&m.away){ Object.assign(res,{[m.id]:simKnockout(m.home,m.away)});} });
-  let b=buildBracket(seeds,res); apply(b.R32);
-  b=buildBracket(seeds,res); apply(b.R16);
-  b=buildBracket(seeds,res); apply(b.QF);
-  b=buildBracket(seeds,res); apply(b.SF);
-  b=buildBracket(seeds,res); apply([b.TP,b.F]);
+  r32.forEach(m=>{ if(m.home&&m.away) res[m.n]=simKnockout(m.home,m.away); });
+  for(const n of [89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104]){
+    const m=buildBracketOfficial(r32,res).M[n];
+    if(m.home&&m.away) res[n]=simKnockout(m.home,m.away);
+  }
   return res;
 }
+const ORD_R32=[74,77,73,75, 83,84,81,82, 76,78,79,80, 86,88,85,87];
+const ORD_R16=[89,90,93,94, 91,92,95,96];
+const ORD_QF=[97,98,99,100];
+const ORD_SF=[101,102];
 
 // ===================== MONTE CARLO (previsão, por índices, rápido) =====================
 const MC_CODES = Object.keys(TEAM);
@@ -297,7 +315,6 @@ const MC_S   = MC_CODES.map(c=>TEAM[c].s);
 const MC_GRP = MC_CODES.map(c=>TEAM[c].g);
 const MC_GROUPS = {}; MC_CODES.forEach((c,i)=>{ (MC_GROUPS[TEAM[c].g] = MC_GROUPS[TEAM[c].g]||[]).push(i); });
 const FIXI = [[0,1],[2,3],[0,2],[3,1],[0,3],[1,2]];
-const ORDER32 = seedOrder(32);
 
 function mcGoals(si,sj){
   const r=si/sj;
@@ -338,37 +355,25 @@ function mcGroup(members){
   return ord.map(i=>({m:members[i], Pts:Pts[i], GD:GD[i], GF:GF[i]}));
 }
 
-// roda `n` torneios e acumula contagens em acc (Float64Array de 48)
+// roda `n` torneios (estrutura oficial) e acumula contagens em acc (Float64Array de 48)
 function mcRunBatch(n, acc){
-  const NT = MC_CODES.length;
   for(let s=0;s<n;s++){
-    const firsts=[], seconds=[], thirds=[];
+    const W={},R={},T={}, thirds=[];
     for(const g of GROUP_CODES){
       const t=mcGroup(MC_GROUPS[g]);
-      firsts.push(t[0].m); seconds.push(t[1].m); thirds.push(t[2]);
+      W[g]=t[0].m; R[g]=t[1].m; T[g]=t[2].m;
+      thirds.push({Pts:t[2].Pts,GD:t[2].GD,GF:t[2].GF,group:g});
     }
     thirds.sort((p,q)=> q.Pts-p.Pts || q.GD-p.GD || q.GF-p.GF || (Math.random()-.5));
-    const best8=thirds.slice(0,8).map(r=>r.m);
-    const qualified=firsts.concat(seconds,best8); // 32
-    qualified.sort((a,b)=> MC_S[b]-MC_S[a]);
-    const pos=ORDER32.map(seed=>qualified[seed-1]);
-    for(let i=0;i<16;i++){
-      if(MC_GRP[pos[2*i]]===MC_GRP[pos[2*i+1]]){
-        for(let j=i+1;j<16;j++){
-          if(MC_GRP[pos[2*j+1]]!==MC_GRP[pos[2*i]] && MC_GRP[pos[2*j]]!==MC_GRP[pos[2*i+1]]){
-            const tmp=pos[2*i+1]; pos[2*i+1]=pos[2*j+1]; pos[2*j+1]=tmp; break;
-          }
-        }
-      }
-    }
-    let r=[]; for(let i=0;i<16;i++) r.push(mcKoWin(pos[2*i],pos[2*i+1]));      // -> oitavas
-    let nx=[]; for(let i=0;i<8;i++) nx.push(mcKoWin(r[2*i],r[2*i+1]));
-    for(const m of nx) acc.quarter[m]++;                                       // chegou às quartas (8)
-    r=nx; nx=[]; for(let i=0;i<4;i++) nx.push(mcKoWin(r[2*i],r[2*i+1]));
-    for(const m of nx) acc.semi[m]++;                                          // semifinal (4)
-    r=nx; nx=[]; for(let i=0;i<2;i++) nx.push(mcKoWin(r[2*i],r[2*i+1]));
-    for(const m of nx) acc.final[m]++;                                         // final (2)
-    acc.title[mcKoWin(nx[0],nx[1])]++;                                         // campeão
+    const tA=assignThirds(thirds.slice(0,8).map(x=>x.group));
+    const pick=(sl)=> sl.w? W[sl.w] : sl.r? R[sl.r] : T[tA[sl.t]];
+    const win={};
+    for(const m of R32_DEF) win[m.n]=mcKoWin(pick(m.a),pick(m.b));     // 32-avos -> oitavas
+    const w=(ref)=> win[+ref.slice(1)];
+    for(const nn of [89,90,91,92,93,94,95,96]){ const [a,b]=KO_FLOW[nn]; win[nn]=mcKoWin(w(a),w(b)); acc.quarter[win[nn]]++; }
+    for(const nn of [97,98,99,100]){ const [a,b]=KO_FLOW[nn]; win[nn]=mcKoWin(w(a),w(b)); acc.semi[win[nn]]++; }
+    for(const nn of [101,102]){ const [a,b]=KO_FLOW[nn]; win[nn]=mcKoWin(w(a),w(b)); acc.final[win[nn]]++; }
+    const [fa,fb]=KO_FLOW[104]; acc.title[mcKoWin(w(fa),w(fb))]++;
   }
 }
 
@@ -378,7 +383,7 @@ function App(){
   const [dark,setDark]=useState(true);
   const [tab,setTab]=useState("grupos");
   const [matches,setMatches]=useState(buildFixtures);
-  const [seeds,setSeeds]=useState(null);
+  const [r32,setR32]=useState(null);
   const [koRes,setKoRes]=useState({});
   // ---- salvamento ----
   const [loaded,setLoaded]=useState(false);
@@ -413,7 +418,7 @@ function App(){
                       .map((r,i)=>({...r, ok:i<8}));
   },[groupRows]);
 
-  const bracket = useMemo(()=> buildBracket(seeds, koRes), [seeds,koRes]);
+  const bracket = useMemo(()=> buildBracketOfficial(r32, koRes), [r32,koRes]);
 
   // ações
   const setScore=(id,side,val)=>{
@@ -428,37 +433,37 @@ function App(){
   const fillAllGroups=()=> setMatches(ms=>ms.map(m=> (m.hg==null||m.ag==null)?{...m,...simScore(m.home,m.away)}:m));
 
   const generateKO=(rows=groupRows, thirds=bestThirds)=>{
-    const s=buildSeeds(rows, thirds); setSeeds(s); setKoRes({}); return s;
+    const x=buildR32(rows, thirds); setR32(x); setKoRes({}); return x;
   };
   const simEverything=()=>{
     const filled = matches.map(m=> (m.hg==null||m.ag==null)?{...m,...simScore(m.home,m.away)}:m);
     setMatches(filled);
     const rows={}; for(const g of GROUP_CODES) rows[g]=standings(GROUPS[g], filled.filter(m=>m.group===g));
     const thirds=GROUP_CODES.map(g=>({...rows[g][2],group:g})).sort((a,b)=>cmp(a,b)||a.code.localeCompare(b.code)).map((r,i)=>({...r,ok:i<8}));
-    const s=buildSeeds(rows,thirds);
-    setSeeds(s); setKoRes(simulateBracket(s)); setTab("matamata");
+    const x=buildR32(rows,thirds);
+    setR32(x); setKoRes(simulateOfficial(x)); setTab("matamata");
   };
-  const resetAll=()=>{ setMatches(buildFixtures()); setSeeds(null); setKoRes({}); setTab("grupos"); };
+  const resetAll=()=>{ setMatches(buildFixtures()); setR32(null); setKoRes({}); setTab("grupos"); };
 
   // carrega o salvamento automático ao abrir
   useEffect(()=>{
     const a=LS.get(AUTOKEY);
-    if(a && a.matches){ setMatches(a.matches); setSeeds(a.seeds||null); setKoRes(a.koRes||{}); if(typeof a.dark==="boolean") setDark(a.dark); }
+    if(a && a.matches){ setMatches(a.matches); setR32(a.r32||null); setKoRes(a.koRes||{}); if(typeof a.dark==="boolean") setDark(a.dark); }
     setLoaded(true);
   },[]);
 
   // salva automaticamente A CADA mudança (ou seja, a cada placar digitado)
   useEffect(()=>{
     if(!loaded) return;
-    if(LS.set(AUTOKEY,{matches,seeds,koRes,dark})){
+    if(LS.set(AUTOKEY,{matches,r32,koRes,dark})){
       setSavedAt(new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit",second:"2-digit"}));
     }
-  },[matches,seeds,koRes,dark,loaded]);
+  },[matches,r32,koRes,dark,loaded]);
 
   const persistSaves=(list)=>{ setSavesList(list); LS.set(SAVESKEY,list); };
   const flash=(msg)=>{ setToast(msg); clearTimeout(window.__wcToast); window.__wcToast=setTimeout(()=>setToast(null),2200); };
   const nextNum=()=>{ let max=0; savesList.forEach(s=>{ const m=/Simula[çc][ãa]o\s+(\d+)/i.exec(s.name); if(m) max=Math.max(max,+m[1]); }); return max+1; };
-  const snapshot=()=>({matches:matches.map(m=>({...m})), seeds:seeds?[...seeds]:null, koRes:JSON.parse(JSON.stringify(koRes))});
+  const snapshot=()=>({matches:matches.map(m=>({...m})), r32:r32?JSON.parse(JSON.stringify(r32)):null, koRes:JSON.parse(JSON.stringify(koRes))});
   const saveCurrent=()=>{
     const name=(saveName.trim()||`Simulação ${nextNum()}`);
     const entry={id:Date.now().toString(36),name,date:new Date().toISOString(),state:snapshot()};
@@ -473,13 +478,13 @@ function App(){
   };
   const loadSave=(id)=>{
     const e=savesList.find(s=>s.id===id);
-    if(e){ setMatches(e.state.matches.map(m=>({...m}))); setSeeds(e.state.seeds?[...e.state.seeds]:null);
+    if(e){ setMatches(e.state.matches.map(m=>({...m}))); setR32(e.state.r32?JSON.parse(JSON.stringify(e.state.r32)):null);
       setKoRes(JSON.parse(JSON.stringify(e.state.koRes||{}))); setActiveSaveId(id); flash(`"${e.name}" carregada ✓`); }
   };
   const deleteSave=(id)=>{ persistSaves(savesList.filter(s=>s.id!==id)); if(activeSaveId===id) setActiveSaveId(null); };
   const exportJSON=()=>{
     try{
-      const blob=new Blob([JSON.stringify({app:"wc26",date:new Date().toISOString(),matches,seeds,koRes,dark},null,2)],{type:"application/json"});
+      const blob=new Blob([JSON.stringify({app:"wc26",date:new Date().toISOString(),matches,r32,koRes,dark},null,2)],{type:"application/json"});
       const url=URL.createObjectURL(blob); const a=document.createElement("a");
       a.href=url; a.download=`copa2026-simulacao-${Date.now()}.json`; a.click(); setTimeout(()=>URL.revokeObjectURL(url),1000);
     }catch(e){}
@@ -487,7 +492,7 @@ function App(){
   const importJSON=(file)=>{
     if(!file) return;
     const r=new FileReader();
-    r.onload=()=>{ try{ const d=JSON.parse(r.result); if(d.matches){ setMatches(d.matches); setSeeds(d.seeds||null); setKoRes(d.koRes||{}); setShowSaves(false); } }catch(e){} };
+    r.onload=()=>{ try{ const d=JSON.parse(r.result); if(d.matches){ setMatches(d.matches); setR32(d.r32||null); setKoRes(d.koRes||{}); setShowSaves(false); } }catch(e){} };
     r.readAsText(file);
   };
 
@@ -550,7 +555,7 @@ function App(){
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:6,maxHeight:240,overflowY:"auto"}}>
             {savesList.map(s=>{
-              const b = s.state.seeds ? buildBracket(s.state.seeds, s.state.koRes||{}) : null;
+              const b = s.state.r32 ? buildBracketOfficial(s.state.r32, s.state.koRes||{}) : null;
               const filled = (s.state.matches||[]).filter(m=>m.hg!=null&&m.ag!=null).length;
               const active = s.id===activeSaveId;
               return (
@@ -640,11 +645,11 @@ function App(){
         )}
 
         {tab==="matamata" && (
-          !seeds ? (
+          !r32 ? (
             <Empty T={T} sub={sub} done={groupsComplete} onGen={()=>{generateKO();}} />
           ) : (
             <Bracket b={bracket} T={T} sub={sub} setKo={setKo}
-              onSim={()=>setKoRes(simulateBracket(seeds))} dark={dark}/>
+              onSim={()=>setKoRes(simulateOfficial(r32))} dark={dark}/>
           )
         )}
 
@@ -761,39 +766,41 @@ function Empty({T,sub,done,onGen}){
 }
 
 function Bracket({b,T,sub,setKo,onSim,dark}){
+  const M=b.M;
   const cols=[
-    {key:"R32",ph:"R32",ms:b.R32},
-    {key:"R16",ph:"R16",ms:b.R16},
-    {key:"QF",ph:"QF",ms:b.QF},
-    {key:"SF",ph:"SF",ms:b.SF},
-    {key:"F",ph:"F",ms:[b.F]},
+    {ph:"R32", ns:ORD_R32},
+    {ph:"R16", ns:ORD_R16},
+    {ph:"QF",  ns:ORD_QF},
+    {ph:"SF",  ns:ORD_SF},
+    {ph:"F",   ns:[104]},
   ];
   return (
     <div>
-      <div style={{display:"flex",justifyContent:"flex-end",marginBottom:10}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,gap:10,flexWrap:"wrap"}}>
+        <span style={{fontSize:11,color:sub}}>Chaveamento oficial FIFA · clique e edite os placares; no empate aparecem os pênaltis.</span>
         <button onClick={onSim} style={btn("#ED7D3A","#0c0c0c")}><Zap size={14}/> Simular mata-mata</button>
       </div>
       <div style={{display:"flex",gap:14,overflowX:"auto",paddingBottom:12,alignItems:"stretch"}}>
         {cols.map(c=>(
-          <div key={c.key} style={{minWidth:178,display:"flex",flexDirection:"column"}}>
+          <div key={c.ph} style={{minWidth:182,display:"flex",flexDirection:"column"}}>
             <div className="anton" style={{fontSize:13,color:PHASE[c.ph].color,marginBottom:8,letterSpacing:".08em",borderBottom:`2px solid ${PHASE[c.ph].color}`,paddingBottom:4}}>
               {PHASE[c.ph].label}
               <div style={{fontFamily:"'Archivo',sans-serif",fontSize:9.5,fontWeight:500,letterSpacing:0,color:sub}}>{PHASEDATE[c.ph]}</div>
             </div>
             <div style={{display:"flex",flexDirection:"column",justifyContent:"space-around",flex:1,gap:8}}>
-              {c.ms.map((m,i)=> <KOMatch key={m.id} m={m} color={PHASE[c.ph].color} T={T} sub={sub} setKo={setKo} dark={dark}
-                caption={c.ph==="SF"?SF_INFO[i] : c.ph==="F"?PHASEDATE.F : null}/> )}
+              {c.ns.map((n,i)=> <KOMatch key={n} m={M[n]} color={PHASE[c.ph].color} T={T} sub={sub} setKo={setKo} dark={dark}
+                caption={c.ph==="SF"?SF_INFO[i] : c.ph==="F"?PHASEDATE.F : `Jogo ${n}`}/> )}
             </div>
           </div>
         ))}
         {/* coluna 3º lugar */}
-        <div style={{minWidth:178,display:"flex",flexDirection:"column"}}>
+        <div style={{minWidth:182,display:"flex",flexDirection:"column"}}>
           <div className="anton" style={{fontSize:13,color:PHASE.TP.color,marginBottom:8,letterSpacing:".08em",borderBottom:`2px solid ${PHASE.TP.color}`,paddingBottom:4}}>
             {PHASE.TP.label}
             <div style={{fontFamily:"'Archivo',sans-serif",fontSize:9.5,fontWeight:500,letterSpacing:0,color:sub}}>{PHASEDATE.TP}</div>
           </div>
           <div style={{flex:1,display:"flex",alignItems:"center"}}>
-            <KOMatch m={b.TP} color={PHASE.TP.color} T={T} sub={sub} setKo={setKo} dark={dark} caption={PHASEDATE.TP}/>
+            <KOMatch m={M[103]} color={PHASE.TP.color} T={T} sub={sub} setKo={setKo} dark={dark} caption={PHASEDATE.TP}/>
           </div>
         </div>
       </div>
@@ -953,7 +960,7 @@ function Stats({matches,bracket,T,sub,dark}){
   const agg=useMemo(()=>{
     const t={}; const add=(c)=>{ if(!t[c]) t[c]={code:c,GF:0,GA:0,W:0,P:0}; };
     const all=[...matches];
-    if(bracket){ ["R32","R16","QF","SF"].forEach(k=>all.push(...bracket[k])); all.push(bracket.TP,bracket.F); }
+    if(bracket && bracket.M){ for(const n in bracket.M) all.push(bracket.M[n]); }
     for(const m of all){ if(!m||m.home==null||m.away==null||m.hg==null||m.ag==null) continue;
       add(m.home);add(m.away);
       t[m.home].GF+=m.hg;t[m.home].GA+=m.ag;t[m.home].P++;
