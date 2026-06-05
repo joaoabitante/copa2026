@@ -307,6 +307,9 @@ const ORD_R32=[74,77,73,75, 83,84,81,82, 76,78,79,80, 86,88,85,87];
 const ORD_R16=[89,90,93,94, 91,92,95,96];
 const ORD_QF=[97,98,99,100];
 const ORD_SF=[101,102];
+// rótulo oficial de cada slot (p/ conferência contra a chave oficial)
+const slotLabel=(s)=> s.w?("Venc. "+s.w) : s.r?("Vice "+s.r) : ("3º "+T3_ALLOWED[s.t].join("/"));
+const R32_LABEL={}; R32_DEF.forEach(m=>{ R32_LABEL[m.n]=slotLabel(m.a)+" × "+slotLabel(m.b); });
 
 // ===================== MONTE CARLO (previsão, por índices, rápido) =====================
 const MC_CODES = Object.keys(TEAM);
@@ -766,74 +769,92 @@ function Empty({T,sub,done,onGen}){
 }
 
 function Bracket({b,T,sub,setKo,onSim,dark}){
-  const M=b.M;
-  const cols=[
-    {ph:"R32", ns:ORD_R32},
-    {ph:"R16", ns:ORD_R16},
-    {ph:"QF",  ns:ORD_QF},
-    {ph:"SF",  ns:ORD_SF},
-    {ph:"F",   ns:[104]},
-  ];
+  const M=b.M, champ=b.champion;
+  // metades da chave (estrutura oficial): cada lado vai de 8 32-avos até 1 semifinalista
+  const L={ R32:[74,77,73,75,83,84,81,82], R16:[89,90,93,94], QF:[97,98], SF:[101] };
+  const Rr={ SF:[102], QF:[99,100], R16:[91,92,95,96], R32:[76,78,79,80,86,88,85,87] };
+  const cap=(n)=> n===101?SF_INFO[0] : n===102?SF_INFO[1] : (Rr.R32.includes(n)||L.R32.includes(n))?R32_LABEL[n] : null;
+  const Col=({nums,ph})=>(
+    <div style={{display:"flex",flexDirection:"column",justifyContent:"space-around",alignItems:"stretch",
+      minWidth: ph==="R32"?132:122}}>
+      {nums.map(n=> <KOCompact key={n} m={M[n]} n={n} color={PHASE[ph].color} T={T} sub={sub} setKo={setKo} dark={dark} caption={cap(n)}/> )}
+    </div>
+  );
   return (
     <div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,gap:10,flexWrap:"wrap"}}>
-        <span style={{fontSize:11,color:sub}}>Chaveamento oficial FIFA · clique e edite os placares; no empate aparecem os pênaltis.</span>
+        <span style={{fontSize:11,color:sub}}>Chaveamento oficial FIFA · edite os placares (no empate, digite os pênaltis).</span>
         <button onClick={onSim} style={btn("#ED7D3A","#0c0c0c")}><Zap size={14}/> Simular mata-mata</button>
       </div>
-      <div style={{display:"flex",gap:14,overflowX:"auto",paddingBottom:12,alignItems:"stretch"}}>
-        {cols.map(c=>(
-          <div key={c.ph} style={{minWidth:182,display:"flex",flexDirection:"column"}}>
-            <div className="anton" style={{fontSize:13,color:PHASE[c.ph].color,marginBottom:8,letterSpacing:".08em",borderBottom:`2px solid ${PHASE[c.ph].color}`,paddingBottom:4}}>
-              {PHASE[c.ph].label}
-              <div style={{fontFamily:"'Archivo',sans-serif",fontSize:9.5,fontWeight:500,letterSpacing:0,color:sub}}>{PHASEDATE[c.ph]}</div>
-            </div>
-            <div style={{display:"flex",flexDirection:"column",justifyContent:"space-around",flex:1,gap:8}}>
-              {c.ns.map((n,i)=> <KOMatch key={n} m={M[n]} color={PHASE[c.ph].color} T={T} sub={sub} setKo={setKo} dark={dark}
-                caption={c.ph==="SF"?SF_INFO[i] : c.ph==="F"?PHASEDATE.F : `Jogo ${n}`}/> )}
-            </div>
+      <div style={{display:"flex",alignItems:"stretch",gap:8,overflowX:"auto",paddingBottom:12,minHeight:700}}>
+        <Col nums={L.R32} ph="R32"/>
+        <Col nums={L.R16} ph="R16"/>
+        <Col nums={L.QF}  ph="QF"/>
+        <Col nums={L.SF}  ph="SF"/>
+        {/* centro: final + campeã + 3º lugar */}
+        <div style={{display:"flex",flexDirection:"column",justifyContent:"center",alignItems:"center",minWidth:170,gap:8,padding:"0 4px"}}>
+          <div className="anton" style={{fontSize:14,color:PHASE.F.color}}>FINAL</div>
+          <div style={{fontSize:9,color:sub,textAlign:"center"}}>{PHASEDATE.F}</div>
+          <div style={{width:150}}><KOCompact m={M[104]} n={104} color={PHASE.F.color} T={T} sub={sub} setKo={setKo} dark={dark}/></div>
+          <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3,margin:"8px 0"}}>
+            <Trophy size={32} color="#F2B705"/>
+            <div style={{fontSize:9,color:sub,letterSpacing:".14em"}}>CAMPEÃ</div>
+            {champ
+              ? <div className="anton" style={{fontSize:16,display:"flex",alignItems:"center",gap:7,textAlign:"center"}}><Flag code={champ} h={20}/> {TEAM[champ].n.toUpperCase()}</div>
+              : <div style={{color:sub,fontSize:12}}>—</div>}
           </div>
-        ))}
-        {/* coluna 3º lugar */}
-        <div style={{minWidth:182,display:"flex",flexDirection:"column"}}>
-          <div className="anton" style={{fontSize:13,color:PHASE.TP.color,marginBottom:8,letterSpacing:".08em",borderBottom:`2px solid ${PHASE.TP.color}`,paddingBottom:4}}>
-            {PHASE.TP.label}
-            <div style={{fontFamily:"'Archivo',sans-serif",fontSize:9.5,fontWeight:500,letterSpacing:0,color:sub}}>{PHASEDATE.TP}</div>
-          </div>
-          <div style={{flex:1,display:"flex",alignItems:"center"}}>
-            <KOMatch m={M[103]} color={PHASE.TP.color} T={T} sub={sub} setKo={setKo} dark={dark} caption={PHASEDATE.TP}/>
-          </div>
+          <div className="anton" style={{fontSize:11,color:PHASE.TP.color,marginTop:6}}>3º LUGAR</div>
+          <div style={{fontSize:9,color:sub}}>{PHASEDATE.TP}</div>
+          <div style={{width:150}}><KOCompact m={M[103]} n={103} color={PHASE.TP.color} T={T} sub={sub} setKo={setKo} dark={dark}/></div>
         </div>
+        <Col nums={Rr.SF}  ph="SF"/>
+        <Col nums={Rr.QF}  ph="QF"/>
+        <Col nums={Rr.R16} ph="R16"/>
+        <Col nums={Rr.R32} ph="R32"/>
+      </div>
+      {/* legenda de fases + datas */}
+      <div style={{display:"flex",flexWrap:"wrap",gap:"4px 14px",fontSize:10,color:sub,marginTop:4}}>
+        {[["R32","32-avos"],["R16","oitavas"],["QF","quartas"],["SF","semis"],["F","final"]].map(([k,l])=>(
+          <span key={k} style={{display:"inline-flex",alignItems:"center",gap:4}}>
+            <i style={{width:9,height:9,borderRadius:2,background:PHASE[k].color,display:"inline-block"}}/>{l}: {PHASEDATE[k]}
+          </span>
+        ))}
       </div>
     </div>
   );
 }
 
-function KOMatch({m,color,T,sub,setKo,dark,caption}){
+// confronto compacto do mata-mata (códigos de 3 letras + placar; pênaltis no empate)
+function KOCompact({m,n,color,T,sub,setKo,dark,caption}){
+  if(!m) return null;
   const w=winner(m);
-  const isDraw = m.hg!=null && m.ag!=null && m.hg===m.ag;
-  const row=(code,goals,penField,penVal)=>{
-    const won = w && w===code;
+  const isDraw=m.hg!=null && m.ag!=null && m.hg===m.ag;
+  const Row=({code,goals,penField,penVal})=>{
+    const won=w&&w===code;
     return (
-      <div style={{display:"flex",alignItems:"center",gap:6,padding:"5px 8px",
-        opacity: code?1:.4, background: won?(dark?"rgba(255,255,255,.06)":"rgba(0,0,0,.05)"):"transparent"}}>
-        <span style={{width:21,display:"inline-flex"}}>{code?<Flag code={code}/>:null}</span>
-        <span style={{flex:1,fontSize:12,fontWeight:won?800:500,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
-          {code?TEAM[code].n:"—"}
-        </span>
-        {isDraw && code && <ScoreInput val={penVal} onChange={v=>setKo(m.id,penField,v)} T={T} accent={color}/>}
-        <ScoreInput val={goals} onChange={v=>setKo(m.id, penField==="hpen"?"hg":"ag", v)} T={T} accent={won?color:T.line}/>
+      <div style={{display:"flex",alignItems:"center",gap:4,padding:"3px 5px",
+        background: won?(dark?"rgba(255,255,255,.08)":"rgba(0,0,0,.06)"):"transparent"}}>
+        <span style={{width:18,display:"inline-flex"}}>{code?<Flag code={code} h={12}/>:null}</span>
+        <span style={{flex:1,fontSize:11,fontWeight:won?800:500,color:code?T.text:sub,whiteSpace:"nowrap"}}>{code?code:"—"}</span>
+        {isDraw&&code&&<input className="score" type="number" inputMode="numeric" value={penVal==null?"":penVal}
+          onChange={e=>setKo(m.id,penField, e.target.value===""?null:Math.max(0,Math.min(99,parseInt(e.target.value,10)||0)))}
+          title="pênaltis"
+          style={{width:18,textAlign:"center",background:"transparent",color:color,border:"none",borderBottom:`1px dashed ${color}`,fontSize:10,fontWeight:700}}/>}
+        <input className="score" type="number" inputMode="numeric" value={goals==null?"":goals}
+          onChange={e=>setKo(m.id, penField==="hpen"?"hg":"ag", e.target.value===""?null:Math.max(0,Math.min(99,parseInt(e.target.value,10)||0)))}
+          style={{width:24,textAlign:"center",background:T.inputBg,color:T.text,border:`1px solid ${won?color:T.line}`,borderRadius:4,padding:"2px 0",fontSize:12,fontWeight:700}}/>
       </div>
     );
   };
   return (
-    <div>
-      {caption && <div style={{fontSize:9.5,color:sub,textAlign:"center",marginBottom:3}}>{caption}</div>}
-      <div style={{background:T.panel,border:`1px solid ${T.line}`,borderLeft:`4px solid ${color}`,borderRadius:8,overflow:"hidden"}}>
-        {row(m.home, m.hg, "hpen", m.hpen)}
+    <div title={caption?`Jogo ${n} · ${caption}`:`Jogo ${n}`}>
+      {caption && /\d{2}\/\d{2}/.test(caption) && <div style={{fontSize:8.5,color:sub,textAlign:"center"}}>{caption}</div>}
+      <div style={{background:T.panel,border:`1px solid ${T.line}`,borderLeft:`3px solid ${color}`,borderRadius:6,overflow:"hidden"}}>
+        <Row code={m.home} goals={m.hg} penField="hpen" penVal={m.hpen}/>
         <div style={{height:1,background:T.line}}/>
-        {row(m.away, m.ag, "apen", m.apen)}
-        {isDraw && <div style={{fontSize:9,color:sub,textAlign:"center",padding:"2px"}}>pênaltis ←</div>}
+        <Row code={m.away} goals={m.ag} penField="apen" penVal={m.apen}/>
       </div>
+      <div style={{fontSize:8,color:sub,textAlign:"center",opacity:.7}}>J{n}</div>
     </div>
   );
 }
